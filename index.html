@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AJ Studio — 3D 真人數位人動態特技與換裝系統</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  
+  <!-- Three.js, OrbitControls & GLTFLoader -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #1a1d26;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(23, 23, 23, 0.4);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(80, 80, 80, 0.6);
+      border-radius: 4px;
+    }
+    #loading-overlay {
+      transition: opacity 0.4s ease-out;
+    }
+    .mobile-drawer-transition {
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  </style>
+</head>
+<body class="bg-neutral-950 text-neutral-100 h-screen w-screen overflow-hidden flex flex-col font-sans">
+
+  <!-- 頂部導覽列 -->
+  <header class="h-13 sm:h-14 bg-neutral-900/90 backdrop-blur-md border-b border-neutral-800 flex items-center justify-between px-3 sm:px-4 z-20 shrink-0">
+    <div class="flex items-center space-x-2 sm:space-x-3">
+      <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/30 text-xs sm:text-sm">
+        AJ
+      </div>
+      <div>
+        <h1 class="text-xs sm:text-sm font-bold tracking-wide flex items-center gap-1.5">
+          AJ-Studio <span class="text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 font-mono border border-blue-500/30">v3.5 Action Pro</span>
+        </h1>
+        <p class="text-[10px] text-neutral-400 hidden sm:block">Jason 真人 3D 動作特技系統</p>
+      </div>
+    </div>
+
+    <!-- 中間視角切換 -->
+    <div class="flex items-center bg-neutral-800/80 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-neutral-700/60 shadow-inner">
+      <button id="btn-focus-face" class="px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-md sm:rounded-lg text-neutral-300 hover:text-white transition flex items-center gap-1">
+        <i class="fa-regular fa-face-smile text-cyan-400"></i> <span>面部</span>
+      </button>
+      <button id="btn-focus-body" class="px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-md sm:rounded-lg bg-blue-600 text-white shadow transition flex items-center gap-1">
+        <i class="fa-solid fa-person text-white"></i> <span>全身</span>
+      </button>
+      <button id="btn-focus-shoes" class="px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded-md sm:rounded-lg text-neutral-300 hover:text-white transition flex items-center gap-1">
+        <i class="fa-solid fa-shoe-prints text-amber-400"></i> <span>鞋履</span>
+      </button>
+    </div>
+
+    <!-- 右側功能按鈕 -->
+    <div class="flex items-center space-x-1.5 sm:space-x-2">
+      <label for="glb-file-input" class="p-1.5 sm:px-2.5 sm:py-1.5 bg-emerald-600/90 hover:bg-emerald-600 text-xs font-medium rounded-lg flex items-center gap-1 transition text-white cursor-pointer" title="重新選取 .glb 檔案">
+        <i class="fa-solid fa-folder-open text-xs"></i>
+        <span class="hidden md:inline">選取模型</span>
+      </label>
+      <input type="file" id="glb-file-input" accept=".glb,.gltf" class="hidden">
+
+      <button id="btn-export-image" class="p-1.5 sm:px-2.5 sm:py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-medium rounded-lg flex items-center gap-1 transition text-white" title="截圖匯出">
+        <i class="fa-solid fa-camera text-xs"></i>
+        <span class="hidden md:inline">截圖</span>
+      </button>
+
+      <button id="btn-toggle-mobile-panel" class="md:hidden p-1.5 px-2 bg-neutral-800 text-cyan-400 hover:text-white border border-neutral-700 text-xs font-medium rounded-lg flex items-center gap-1 transition">
+        <i class="fa-solid fa-sliders text-xs"></i>
+        <span id="mobile-panel-btn-text">動作</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 中央主內容區 (全螢幕 3D Canvas + 底部/右側控制抽屜) -->
+  <div class="flex-1 relative flex flex-col md:flex-row overflow-hidden">
+
+    <main id="canvas-container" class="flex-1 w-full h-full relative cursor-grab active:cursor-grabbing">
+      <div id="loading-overlay" class="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center z-30">
+        <div class="w-9 h-9 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-3"></div>
+        <div class="text-xs sm:text-sm font-medium text-neutral-200" id="loading-text">載入中，正在加載真人 3D 數位人與特技動作庫...</div>
+      </div>
+
+      <!-- 頂部模型狀態橫幅 -->
+      <div id="model-banner" class="absolute top-2.5 sm:top-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium backdrop-blur-md border shadow-lg flex items-center gap-1.5 transition-all bg-neutral-900/80 border-neutral-700 text-neutral-200 pointer-events-auto max-w-[90vw]">
+        <span id="banner-icon"><i class="fa-solid fa-circle-check text-emerald-400"></i></span>
+        <span id="banner-text" class="truncate">已載入模型: jason-model.glb</span>
+      </div>
+
+      <!-- 左下角浮動工具列 -->
+      <div class="absolute bottom-16 md:bottom-4 left-3 sm:left-4 z-10 flex flex-col gap-1.5 pointer-events-auto">
+        <div class="bg-neutral-900/85 backdrop-blur-md border border-neutral-800 rounded-xl p-1 shadow-lg flex items-center gap-1.5 text-[11px] sm:text-xs">
+          <button id="btn-toggle-rotate" class="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition flex items-center gap-1">
+            <i class="fa-solid fa-arrows-rotate text-blue-400"></i> <span class="hidden sm:inline">自轉: 開</span>
+          </button>
+          <div class="w-px h-3 bg-neutral-700"></div>
+          <button id="btn-reset-view" class="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition flex items-center gap-1">
+            <i class="fa-solid fa-rotate-left"></i> 重設視角
+          </button>
+          <div class="w-px h-3 bg-neutral-700"></div>
+          <button id="btn-toggle-lighting" class="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition flex items-center gap-1">
+            <i class="fa-solid fa-sun text-amber-400"></i> <span id="lighting-label" class="hidden sm:inline">攝影棚</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 控制面板 (電腦右側欄 / 手機底部抽屜) -->
+    <aside id="control-panel" class="w-full md:w-96 bg-neutral-900/95 backdrop-blur-2xl border-t md:border-t-0 md:border-l border-neutral-800 flex flex-col z-20 shadow-2xl shrink-0 absolute md:relative bottom-0 left-0 right-0 max-h-[50vh] md:max-h-full mobile-drawer-transition">
+      
+      <!-- 手機拉桿 -->
+      <div id="drawer-handle" class="w-full py-1.5 flex flex-col items-center justify-center md:hidden cursor-pointer bg-neutral-900/80 active:bg-neutral-800 border-b border-neutral-800/60 select-none">
+        <div class="w-10 h-1 bg-neutral-600 rounded-full mb-1"></div>
+        <span class="text-[10px] text-neutral-400 flex items-center gap-1" id="drawer-tip-text">
+          <i class="fa-solid fa-chevron-down text-[8px]" id="drawer-icon"></i> 點擊收起 / 展開動作面板
+        </span>
+      </div>
+
+      <!-- 分類標籤 -->
+      <div class="p-2 sm:p-3 border-b border-neutral-800 shrink-0">
+        <div class="grid grid-cols-3 gap-1 bg-neutral-950 p-1 rounded-xl border border-neutral-800 text-xs text-center">
+          <button id="tab-action" class="main-panel-tab py-1.5 sm:py-2 rounded-lg font-bold transition flex items-center justify-center gap-1 bg-blue-600 text-white shadow text-[11px] sm:text-xs">
+            <i class="fa-solid fa-bolt"></i>
+            <span>特技動作</span>
+          </button>
+          <button id="tab-outfit" class="main-panel-tab py-1.5 sm:py-2 rounded-lg font-medium transition flex items-center justify-center gap-1 text-neutral-400 hover:text-white text-[11px] sm:text-xs">
+            <i class="fa-solid fa-shirt"></i>
+            <span>西裝換色</span>
+          </button>
+          <button id="tab-accessories" class="main-panel-tab py-1.5 sm:py-2 rounded-lg font-medium transition flex items-center justify-center gap-1 text-neutral-400 hover:text-white text-[11px] sm:text-xs">
+            <i class="fa-solid fa-glasses"></i>
+            <span>眼鏡配飾</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 子面板 1：特技動作庫 (足球無限的波、中國功夫、跑步、衝浪等) -->
+      <div id="panel-action" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 custom-scrollbar">
+        <div class="flex items-center justify-between text-xs text-neutral-300">
+          <span class="font-medium text-cyan-400"><i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i> 點選專屬造型姿態：</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 sm:gap-2.5">
+          <!-- 1. 自然垂手站立 -->
+          <div data-pose="idle" class="pose-btn cursor-pointer rounded-xl border p-2.5 flex flex-col items-center text-center transition border-blue-500 bg-blue-950/40 shadow-lg shadow-blue-500/20 group">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center text-lg mb-1 group-hover:scale-110 transition">
+              <i class="fa-solid fa-person text-xl"></i>
+            </div>
+            <div class="text-xs font-bold text-white">自然垂手站立</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">西裝端莊垂手、均勻呼吸</div>
+          </div>
+
+          <!-- 2. 足球巨星踩波 -->
+          <div data-pose="soccer" class="pose-btn cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition group">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center text-lg mb-1 group-hover:scale-110 transition">
+              <i class="fa-solid fa-futbol text-xl"></i>
+            </div>
+            <div class="text-xs font-bold text-neutral-200 flex items-center gap-1">
+              <span>足球巨星 (踩波)</span>
+              <span class="text-[9px] px-1 bg-emerald-500/30 text-emerald-300 rounded font-normal">寫真</span>
+            </div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">單腳踩球名場面、從容休閒</div>
+          </div>
+
+          <!-- 3. 武術宗師抱拳禮 -->
+          <div data-pose="kungfu" class="pose-btn cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition group">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-rose-600/20 text-rose-400 flex items-center justify-center text-lg mb-1 group-hover:scale-110 transition">
+              <i class="fa-solid fa-hand-fist text-xl"></i>
+            </div>
+            <div class="text-xs font-bold text-neutral-200">武術宗師 (抱拳禮)</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">傳統中華抱拳、沉穩威儀</div>
+          </div>
+
+          <!-- 4. 自信叉腰模特 -->
+          <div data-pose="model" class="pose-btn cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition group">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-purple-600/20 text-purple-400 flex items-center justify-center text-lg mb-1 group-hover:scale-110 transition">
+              <i class="fa-solid fa-user-tie text-xl"></i>
+            </div>
+            <div class="text-xs font-bold text-neutral-200">自信叉腰 (模特)</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">雙手叉腰、完美展示西裝</div>
+          </div>
+
+          <!-- 5. 親切揮手致意 -->
+          <div data-pose="wave" class="pose-btn cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition group">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-amber-600/20 text-amber-400 flex items-center justify-center text-lg mb-1 group-hover:scale-110 transition">
+              <i class="fa-solid fa-hand text-xl"></i>
+            </div>
+            <div class="text-xs font-bold text-neutral-200">親切揮手致意</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">單手自然微抬、招手問候</div>
+          </div>
+
+          <!-- 6. 休閒漫步走姿 -->
+          <div data-pose="walk" class="pose-btn cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition group">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-cyan-600/20 text-cyan-400 flex items-center justify-center text-lg mb-1 group-hover:scale-110 transition">
+              <i class="fa-solid fa-person-walking text-xl"></i>
+            </div>
+            <div class="text-xs font-bold text-neutral-200">休閒邁步走姿</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">雙手微擺、步履從容</div>
+          </div>
+        </div>
+      </div>
+      <!-- 子面板 2：西裝換色 -->
+      <div id="panel-outfit" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 custom-scrollbar hidden">
+        <div class="flex items-center justify-between text-xs text-neutral-300 font-medium">
+          <span>西裝色彩風格：</span>
+          <button id="btn-reset-outfit" class="text-blue-400 hover:underline text-[11px]">還原原裝藍</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 sm:gap-2.5">
+          <div data-color="original" class="color-card cursor-pointer rounded-xl border p-2.5 flex flex-col items-center text-center transition border-blue-500 bg-blue-950/40">
+            <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-800 border border-white/20 mb-1"></div>
+            <div class="text-xs font-bold text-white">原版經典深藍</div>
+          </div>
+
+          <div data-color="#2a2e39" class="color-card cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition">
+            <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-800 border border-white/20 mb-1"></div>
+            <div class="text-xs font-bold text-neutral-200">高級炭黑禮服</div>
+          </div>
+
+          <div data-color="#9a7b56" class="color-card cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition">
+            <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-700 border border-white/20 mb-1"></div>
+            <div class="text-xs font-bold text-neutral-200">雅痞卡其休閒</div>
+          </div>
+
+          <div data-color="#6b21a8" class="color-card cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition">
+            <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-900 border border-white/20 mb-1"></div>
+            <div class="text-xs font-bold text-neutral-200">勃艮第尊貴紅</div>
+          </div>
+
+          <div data-color="#cbd5e1" class="color-card cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition">
+            <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-300 border border-white/20 mb-1"></div>
+            <div class="text-xs font-bold text-neutral-200">清爽夏日淺灰</div>
+          </div>
+
+          <div data-color="#065f46" class="color-card cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex flex-col items-center text-center transition">
+            <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-800 border border-white/20 mb-1"></div>
+            <div class="text-xs font-bold text-neutral-200">翡翠墨綠西裝</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 子面板 3：配飾與眼鏡 -->
+      <div id="panel-accessories" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5 custom-scrollbar hidden">
+        <div id="btn-glasses-black" class="cursor-pointer rounded-xl border p-2.5 flex items-center justify-between border-blue-500 bg-blue-950/40 text-xs">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-glasses text-base text-blue-400"></i>
+            <span class="font-bold text-white">標誌黑框眼鏡 (預設)</span>
+          </div>
+          <i class="fa-solid fa-circle-check text-blue-400"></i>
+        </div>
+
+        <div id="btn-glasses-gold" class="cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-glasses text-base text-amber-400"></i>
+            <span class="font-bold text-neutral-200">復古金絲鏡框</span>
+          </div>
+        </div>
+
+        <div id="btn-glasses-none" class="cursor-pointer rounded-xl border border-neutral-800 hover:border-neutral-700 bg-neutral-900/60 p-2.5 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-eye text-base text-neutral-400"></i>
+            <span class="font-bold text-neutral-200">隱藏 / 摘下眼鏡</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 3D 核心邏輯 (足球模擬、功夫解算、跑步與骨骼姿態) -->
+  <script>
+  (function() {
+    'use strict';
+
+    class JasonAvatarScene {
+      constructor() {
+        this.container = document.getElementById('canvas-container');
+        this.customModelGroup = new THREE.Group();
+        this.currentModel = null;
+        this.bones = {};
+        this.jacketMeshes = [];
+        this.glassesMeshes = [];
+        this.originalMaterials = new Map();
+        this.mixer = null;
+        this.clock = new THREE.Clock();
+
+        this.currentPose = 'idle'; // idle, soccer, kungfu, run, surf, wave
+        this.baseHipsY = 0;
+
+        const isMobile = window.innerWidth < 768;
+        this.targetCameraPos = new THREE.Vector3(0, 0.9, isMobile ? 3.6 : 3.0);
+        this.targetLookAt = new THREE.Vector3(0, 0.85, 0);
+        this.isAutoRotating = true;
+        this.currentLighting = 'studio';
+
+        this.initThree();
+        this.setupLighting();
+        this.setupGround();
+        this.createSoccerBall();
+        this.bindEvents();
+        this.autoLoadRootModel();
+        this.animate();
+      }
+
+      initThree() {
+        const width = this.container.clientWidth || window.innerWidth;
+        const height = this.container.clientHeight || (window.innerHeight - 56);
+
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x1a1d26);
+        this.scene.fog = new THREE.FogExp2(0x1a1d26, 0.035);
+
+        this.camera = new THREE.PerspectiveCamera(38, width / height, 0.05, 50);
+        this.camera.position.copy(this.targetCameraPos);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        this.renderer.setSize(width, height);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.35;
+        this.renderer.outputEncoding = THREE.sRGBEncoding;
+        this.container.appendChild(this.renderer.domElement);
+
+        this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.target.copy(this.targetLookAt);
+        this.controls.minDistance = 0.22;
+        this.controls.maxDistance = 5.5;
+        this.controls.maxPolarAngle = Math.PI / 2 + 0.05;
+        this.controls.autoRotate = this.isAutoRotating;
+        this.controls.autoRotateSpeed = 1.0;
+
+        this.controls.touches = {
+          ONE: THREE.TOUCH.ROTATE,
+          TWO: THREE.TOUCH.DOLLY_PAN
+        };
+
+        this.scene.add(this.customModelGroup);
+      }
+
+      setupLighting() {
+        this.lights = {};
+        const amb = new THREE.AmbientLight(0xffffff, 1.15);
+        this.scene.add(amb);
+        this.lights.amb = amb;
+
+        const key = new THREE.DirectionalLight(0xfffaee, 2.4);
+        key.position.set(3, 4.5, 3.5);
+        key.castShadow = true;
+        key.shadow.mapSize.width = 1024;
+        key.shadow.mapSize.height = 1024;
+        this.scene.add(key);
+        this.lights.key = key;
+
+        const floorBounce = new THREE.DirectionalLight(0xa5b4fc, 0.9);
+        floorBounce.position.set(0, -1, 2);
+        this.scene.add(floorBounce);
+        this.lights.floorBounce = floorBounce;
+
+        const rim = new THREE.DirectionalLight(0x38bdf8, 1.8);
+        rim.position.set(0, 3, -3.2);
+        this.scene.add(rim);
+        this.lights.rim = rim;
+      }
+
+      setupGround() {
+        const gGeo = new THREE.CircleGeometry(4, 48);
+        const gMat = new THREE.MeshStandardMaterial({ color: 0x2e3444, roughness: 0.5, metalness: 0.25 });
+        const ground = new THREE.Mesh(gGeo, gMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        this.scene.add(ground);
+
+        const rGeo = new THREE.RingGeometry(3.9, 4.0, 48);
+        const rMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9, side: THREE.DoubleSide });
+        const ring = new THREE.Mesh(rGeo, rMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.005;
+        this.scene.add(ring);
+      }
+
+      /* ===== 建立逼真 3D 足球與貼圖 ===== */
+      createSoccerBall() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(0, 0, 512, 256);
+        ctx.fillStyle = '#111827';
+
+        // 經典黑白五角斑紋繪製
+        for (let y = 30; y < 256; y += 65) {
+          for (let x = (y % 130 === 30 ? 25 : 65); x < 512; x += 85) {
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        const ballTex = new THREE.CanvasTexture(canvas);
+        const ballMat = new THREE.MeshStandardMaterial({
+          map: ballTex,
+          roughness: 0.35,
+          metalness: 0.05,
+        });
+
+        const ballGeo = new THREE.SphereGeometry(0.11, 28, 28);
+        this.soccerBall = new THREE.Mesh(ballGeo, ballMat);
+        this.soccerBall.castShadow = true;
+        this.soccerBall.position.set(0.12, 0.35, 0.32);
+        this.soccerBall.visible = false; // 僅在踢足球模式顯示
+
+        this.scene.add(this.soccerBall);
+      }
+
+      autoLoadRootModel() {
+        const ts = Date.now();
+        const candidates = [
+          './jason-model.glb?v=' + ts,
+          'jason-model.glb?v=' + ts,
+          './jadon-model.glb?v=' + ts,
+          'jadon-model.glb?v=' + ts,
+          './jason-model.glb',
+          './jadon-model.glb',
+        ];
+
+        let index = 0;
+        const loader = new THREE.GLTFLoader();
+
+        const updateBanner = (text, iconHtml) => {
+          const bannerText = document.getElementById('banner-text');
+          const bannerIcon = document.getElementById('banner-icon');
+          if (bannerText) bannerText.textContent = text;
+          if (bannerIcon) bannerIcon.innerHTML = iconHtml;
+        };
+
+        const tryNext = () => {
+          if (index >= candidates.length) {
+            const bannerText = document.getElementById('banner-text');
+            const bannerIcon = document.getElementById('banner-icon');
+            if (bannerIcon) bannerIcon.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-400"></i>';
+            if (bannerText) {
+              bannerText.innerHTML = '請確認模型已上傳至 GitHub，或 <button id="btn-banner-pick" class="underline text-emerald-400 font-bold ml-1 hover:text-emerald-300">📁 直接手動選取</button>';
+              setTimeout(() => {
+                const pBtn = document.getElementById('btn-banner-pick');
+                if (pBtn) pBtn.onclick = () => document.getElementById('glb-file-input').click();
+              }, 50);
+            }
+            this.hideLoading();
+            return;
+          }
+
+          const currentUrl = candidates[index++];
+          loader.load(
+            currentUrl,
+            (gltf) => {
+              this.applyLoadedGLB(gltf, currentUrl.split('?')[0]);
+              updateBanner(`已載入: ${currentUrl.split('?')[0]}`, '<i class="fa-solid fa-circle-check text-emerald-400"></i>');
+              this.hideLoading();
+            },
+            undefined,
+            () => tryNext()
+          );
+        };
+
+        tryNext();
+      }
+
+      applyLoadedGLB(gltf, sourceName = '真人數位人') {
+        while (this.customModelGroup.children.length > 0) {
+          this.customModelGroup.remove(this.customModelGroup.children[0]);
+        }
+
+        const model = gltf.scene;
+        this.currentModel = model;
+        this.bones = {};
+        this.jacketMeshes = [];
+        this.glassesMeshes = [];
+        this.originalMaterials.clear();
+
+        // 萬用骨骼辨識 (兼容 Blender Rigify、Mixamo 及 Avaturn 所有命名)
+        model.traverse((child) => {
+          if (child.isBone) {
+            child.userData.initRot = child.rotation.clone();
+            child.userData.initQuat = child.quaternion.clone();
+            child.userData.initPos = child.position.clone();
+
+            const n = child.name.toLowerCase();
+            const isLeft = n.includes('left') || n.includes('.l') || n.includes('_l') || n.startsWith('l_') || n.endsWith('.l') || n.endsWith('_l');
+            const isRight = n.includes('right') || n.includes('.r') || n.includes('_r') || n.startsWith('r_') || n.endsWith('.r') || n.endsWith('_r');
+
+            // 上臂
+            const isUpperArm = (n.includes('arm') || n.includes('upperarm') || n.includes('humerus')) &&
+                               !n.includes('fore') && !n.includes('shoulder') && !n.includes('clavicle') &&
+                               !n.includes('hand') && !n.includes('finger') && !n.includes('roll') && !n.includes('twist');
+            // 前臂
+            const isForeArm = (n.includes('forearm') || (n.includes('arm') && n.includes('lower')) || n.includes('radius') || n.includes('ulna')) &&
+                              !n.includes('hand') && !n.includes('finger');
+
+            // 大腿
+            const isUpLeg = (n.includes('upleg') || n.includes('thigh') || (n.includes('leg') && n.includes('upper'))) && !n.includes('calf');
+            // 小腿
+            const isLeg = (n.includes('leg') || n.includes('calf') || n.includes('shin')) && !n.includes('upleg') && !n.includes('thigh') && !n.includes('foot');
+            // 腳掌
+            const isFoot = n.includes('foot') || n.includes('toe');
+
+            if (isLeft && isUpperArm && !this.bones.leftArm) this.bones.leftArm = child;
+            else if (isRight && isUpperArm && !this.bones.rightArm) this.bones.rightArm = child;
+            else if (isLeft && isForeArm && !this.bones.leftForeArm) this.bones.leftForeArm = child;
+            else if (isRight && isForeArm && !this.bones.rightForeArm) this.bones.rightForeArm = child;
+            else if (isLeft && isUpLeg && !this.bones.leftUpLeg) this.bones.leftUpLeg = child;
+            else if (isRight && isUpLeg && !this.bones.rightUpLeg) this.bones.rightUpLeg = child;
+            else if (isLeft && isLeg && !this.bones.leftLeg) this.bones.leftLeg = child;
+            else if (isRight && isLeg && !this.bones.rightLeg) this.bones.rightLeg = child;
+            else if (isLeft && isFoot && !this.bones.leftFoot) this.bones.leftFoot = child;
+            else if (isRight && isFoot && !this.bones.rightFoot) this.bones.rightFoot = child;
+            else if (n.includes('hips') || n.includes('pelvis')) this.bones.hips = child;
+            else if (n.includes('spine2') || n.includes('chest')) this.bones.chest = child;
+            else if (n.includes('spine')) this.bones.spine = child;
+            else if (n.includes('neck')) this.bones.neck = child;
+            else if (n.includes('head')) this.bones.head = child;
+
+          } else if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            const n = child.name.toLowerCase();
+            const matName = (child.material && child.material.name) ? child.material.name.toLowerCase() : '';
+
+            // 眼鏡辨識
+            if (n.includes('glasses') || n.includes('glass') || n.includes('frame') || matName.includes('glasses')) {
+              this.glassesMeshes.push(child);
+            }
+
+            // 嚴格排除人體皮膚、臉部、五官、頭髮、眼鏡、鞋子 (絕對不變綠面！)
+            const isSkinOrBody = n === 'body' || n.includes('head') || n.includes('face') || n.includes('skin') ||
+                                 n.includes('hair') || n.includes('eye') || n.includes('teeth') || n.includes('tongue') ||
+                                 n.includes('glass') || n.includes('shoe') || n.includes('foot') ||
+                                 matName.includes('skin') || matName.includes('head') || matName.includes('face') ||
+                                 matName.includes('hair') || matName.includes('eye') || matName.includes('shoe');
+
+            // 精準識別西裝外套與西裝褲
+            const isSuitGarment = n.includes('outfit') || n.includes('top') || n.includes('jacket') ||
+                                  n.includes('bottom') || n.includes('pant') || n.includes('suit') ||
+                                  n.includes('blazer') || n.includes('coat') || n.includes('cloth') ||
+                                  matName.includes('outfit') || matName.includes('top') || matName.includes('jacket') ||
+                                  matName.includes('suit') || matName.includes('cloth');
+
+            if (!isSkinOrBody && isSuitGarment) {
+              if (child.material) {
+                if (Array.isArray(child.material)) {
+                  child.material.forEach((m, idx) => {
+                    this.originalMaterials.set(`${child.uuid}_${idx}`, m.clone());
+                  });
+                } else {
+                  this.originalMaterials.set(child.uuid, child.material.clone());
+                }
+                this.jacketMeshes.push(child);
+              }
+            }
+          }
+        });
+
+        // 縮放與雙腳著地
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        if (size.y > 0) {
+          const desiredHeight = 1.78;
+          const scale = desiredHeight / size.y;
+          model.scale.set(scale, scale, scale);
+
+          const updatedBox = new THREE.Box3().setFromObject(model);
+          const updatedCenter = updatedBox.getCenter(new THREE.Vector3());
+          model.position.x = -updatedCenter.x;
+          model.position.y = -updatedBox.min.y;
+          model.position.z = -updatedCenter.z;
+        }
+
+        if (this.bones.hips) {
+          this.baseHipsY = this.bones.hips.position.y;
+        }
+
+        // 預設進入踢足球模式展示，或自然站姿
+        this.setPose('idle');
+
+        this.customModelGroup.add(model);
+        this.setFocus('body');
+      }
+
+      /* ===== 還原所有骨骼至最初狀態 ===== */
+      restoreBonesToInit() {
+        if (!this.currentModel) return;
+        this.currentModel.traverse((child) => {
+          if (child.isBone && child.userData.initQuat) {
+            child.quaternion.copy(child.userData.initQuat);
+            child.position.copy(child.userData.initPos);
+          }
+        });
+      }
+
+      /* ===== 姿態切換器 ===== */
+      setPose(poseName) {
+        this.currentPose = poseName;
+        this.restoreBonesToInit();
+
+        if (this.mixer) {
+          this.mixer.stopAllAction();
+        }
+
+        // 足球顯示開關 (踩波姿態顯示足球)
+        if (this.soccerBall) {
+          this.soccerBall.visible = (poseName === 'soccer');
+          if (poseName === 'soccer') {
+            this.soccerBall.position.set(0.12, 0.11, 0.22);
+          }
+        }
+      }
+
+      setJacketColor(hexColor) {
+        if (hexColor === 'original') {
+          this.jacketMeshes.forEach(mesh => {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((m, idx) => {
+                const orig = this.originalMaterials.get(`${mesh.uuid}_${idx}`);
+                if (orig) mesh.material[idx] = orig.clone();
+              });
+            } else {
+              const orig = this.originalMaterials.get(mesh.uuid);
+              if (orig) mesh.material = orig.clone();
+            }
+          });
+          return;
+        }
+
+        const color = new THREE.Color(hexColor);
+        this.jacketMeshes.forEach(mesh => {
+          const applyColor = (mat) => {
+            if (!mat) return;
+            mat.color = color.clone();
+            mat.roughness = 0.55;
+            mat.needsUpdate = true;
+          };
+
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(m => applyColor(m));
+          } else {
+            applyColor(mesh.material);
+          }
+        });
+      }
+
+      setGlassesStyle(style) {
+        if (style === 'none') {
+          this.glassesMeshes.forEach(m => m.visible = false);
+        } else {
+          this.glassesMeshes.forEach(m => {
+            m.visible = true;
+            if (m.material) {
+              if (style === 'gold') {
+                m.material.color.setHex(0xd4af37);
+                m.material.metalness = 0.85;
+                m.material.roughness = 0.2;
+              } else {
+                m.material.color.setHex(0x111111);
+                m.material.metalness = 0.2;
+                m.material.roughness = 0.4;
+              }
+              m.material.needsUpdate = true;
+            }
+          });
+        }
+      }
+
+      loadCustomGLB(urlOrBuffer, isBuffer = false, filename = '本地模型') {
+        const loader = new THREE.GLTFLoader();
+        const bannerText = document.getElementById('banner-text');
+        if (bannerText) bannerText.textContent = `解析中: ${filename}...`;
+
+        const onLoad = (gltf) => {
+          this.applyLoadedGLB(gltf, filename);
+          if (bannerText) bannerText.textContent = `已載入: ${filename}`;
+        };
+
+        if (isBuffer) {
+          loader.parse(urlOrBuffer, '', onLoad, err => console.error(err));
+        } else {
+          loader.load(urlOrBuffer, onLoad, undefined, err => console.error(err));
+        }
+      }
+
+      setFocus(type) {
+        const isMobile = window.innerWidth < 768;
+        if (type === 'face') {
+          this.targetCameraPos.set(0, 1.66, 0.62);
+          this.targetLookAt.set(0, 1.64, 0);
+        } else if (type === 'body') {
+          this.targetCameraPos.set(0, 0.9, isMobile ? 3.6 : 3.0);
+          this.targetLookAt.set(0, 0.85, 0);
+        } else if (type === 'shoes') {
+          this.targetCameraPos.set(0, 0.25, 1.05);
+          this.targetLookAt.set(0, 0.08, 0);
+        }
+      }
+
+      toggleRotate() {
+        this.isAutoRotating = !this.isAutoRotating;
+        this.controls.autoRotate = this.isAutoRotating;
+        return this.isAutoRotating;
+      }
+
+      setLighting(preset) {
+        this.currentLighting = preset;
+        if (preset === 'beach') {
+          this.lights.amb.intensity = 0.95;
+          this.lights.key.color.setHex(0xfff7db);
+          this.lights.key.intensity = 2.6;
+        } else if (preset === 'studio') {
+          this.lights.amb.intensity = 1.15;
+          this.lights.key.color.setHex(0xfffaed);
+          this.lights.key.intensity = 2.4;
+        } else if (preset === 'neon') {
+          this.lights.amb.intensity = 0.5;
+          this.lights.key.color.setHex(0xec4899);
+          this.lights.key.intensity = 2.5;
+        }
+      }
+
+      hideLoading() {
+        const loader = document.getElementById('loading-overlay');
+        if (loader) {
+          loader.style.opacity = '0';
+          setTimeout(() => { if (loader.parentNode) loader.parentNode.removeChild(loader); }, 400);
+        }
+      }
+
+      bindEvents() {
+        const resize = () => {
+          const w = this.container.clientWidth || window.innerWidth;
+          const h = this.container.clientHeight || (window.innerHeight - 56);
+          if (w && h) {
+            this.camera.aspect = w / h;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(w, h);
+          }
+        };
+        window.addEventListener('resize', resize);
+        window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+
+        const tip = document.getElementById('drag-drop-tip');
+        window.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          tip.classList.remove('hidden');
+          this.container.classList.add('drag-over-border');
+        });
+        window.addEventListener('dragleave', (e) => {
+          if (e.relatedTarget === null) {
+            tip.classList.add('hidden');
+            this.container.classList.remove('drag-over-border');
+          }
+        });
+        window.addEventListener('drop', (e) => {
+          e.preventDefault();
+          tip.classList.add('hidden');
+          this.container.classList.remove('drag-over-border');
+          const file = e.dataTransfer.files[0];
+          if (file && (file.name.endsWith('.glb') || file.name.endsWith('.gltf'))) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              this.loadCustomGLB(evt.target.result, true, file.name);
+            };
+            reader.readAsArrayBuffer(file);
+          }
+        });
+      }
+
+      /* ===== 高擬真自然姿態解算器 (完全杜絕僵硬畸形，打造雜誌寫真級自然美感) ===== */
+      animate() {
+        requestAnimationFrame(() => this.animate());
+
+        const t = this.clock.getElapsedTime();
+
+        if (this.currentModel && this.bones) {
+          // 每次重算前均還原為安全基底
+          const resetB = (b) => {
+            if (b && b.userData.initRot) {
+              b.rotation.copy(b.userData.initRot);
+              b.position.copy(b.userData.initPos);
+            }
+          };
+
+          resetB(this.bones.leftArm);
+          resetB(this.bones.rightArm);
+          resetB(this.bones.leftForeArm);
+          resetB(this.bones.rightForeArm);
+          resetB(this.bones.leftUpLeg);
+          resetB(this.bones.rightUpLeg);
+          resetB(this.bones.leftLeg);
+          resetB(this.bones.rightLeg);
+          resetB(this.bones.leftFoot);
+          resetB(this.bones.rightFoot);
+          resetB(this.bones.head);
+          resetB(this.bones.spine);
+          resetB(this.bones.chest);
+          resetB(this.bones.hips);
+
+          if (this.currentPose === 'idle') {
+            /* ===== 1. 自然垂手站立 (Z軸歸零不前後位移，以X軸真垂落身側，呼吸微動) ===== */
+            const breath = Math.sin(t * 2.2) * 0.012;
+
+            if (this.bones.leftArm) {
+              // 保持 Z 在原始冠狀面 (絕不向後拉也不向前平舉)
+              this.bones.leftArm.rotation.z = this.bones.leftArm.userData.initRot.z;
+              // X 軸順轉 75度垂下身側
+              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x - 1.30 - breath * 0.15;
+            }
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.z = this.bones.rightArm.userData.initRot.z;
+              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x - 1.30 - breath * 0.15;
+            }
+            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.copy(this.bones.leftForeArm.userData.initRot);
+            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.copy(this.bones.rightForeArm.userData.initRot);
+            if (this.bones.chest) this.bones.chest.rotation.x = this.bones.chest.userData.initRot.x + breath;
+            if (this.bones.spine) this.bones.spine.rotation.x = this.bones.spine.userData.initRot.x + breath * 0.5;
+
+          } else if (this.currentPose === 'soccer') {
+            /* ===== 2. 足球巨星 (休閒帥氣單腳踩波風采) ===== */
+            const breath = Math.sin(t * 2) * 0.012;
+
+            // 右腿屈膝輕踩於球頂
+            if (this.bones.rightUpLeg) this.bones.rightUpLeg.rotation.x -= 0.32;
+            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x += 0.46;
+            if (this.bones.rightFoot) this.bones.rightFoot.rotation.x -= 0.12;
+
+            // 雙臂自然放鬆垂於身側
+            if (this.bones.leftArm) {
+              this.bones.leftArm.rotation.z -= 1.28;
+              this.bones.leftArm.rotation.x += 0.05;
+            }
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.z += 1.28;
+              this.bones.rightArm.rotation.x += 0.05;
+            }
+            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.y -= 0.25;
+            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.y += 0.25;
+
+            // 足球停放於右腳下前方
+            if (this.soccerBall) {
+              this.soccerBall.position.set(0.12, 0.11, 0.22);
+            }
+            if (this.bones.chest) this.bones.chest.rotation.x += breath;
+
+          } else if (this.currentPose === 'kungfu') {
+            /* ===== 3. 武術宗師 (中華傳統抱拳禮) ===== */
+            // 雙腳沉穩開立扎馬
+            if (this.bones.leftUpLeg) {
+              this.bones.leftUpLeg.rotation.z += 0.12;
+              this.bones.leftUpLeg.rotation.x -= 0.08;
+            }
+            if (this.bones.rightUpLeg) {
+              this.bones.rightUpLeg.rotation.z -= 0.12;
+              this.bones.rightUpLeg.rotation.x -= 0.08;
+            }
+            if (this.bones.leftLeg) this.bones.leftLeg.rotation.x += 0.16;
+            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x += 0.16;
+            if (this.bones.hips) this.bones.hips.position.y -= 0.03;
+
+            // 雙臂於胸前抱拳相合 (左掌覆於右拳)
+            if (this.bones.leftArm) {
+              this.bones.leftArm.rotation.z -= 0.85;
+              this.bones.leftArm.rotation.x -= 0.42;
+            }
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.z += 0.85;
+              this.bones.rightArm.rotation.x -= 0.42;
+            }
+            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.y -= 0.85;
+            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.y += 0.85;
+
+          } else if (this.currentPose === 'model') {
+            /* ===== 4. 自信叉腰 (時尚西裝模特展姿) ===== */
+            if (this.bones.leftArm) {
+              this.bones.leftArm.rotation.z -= 1.05;
+              this.bones.leftArm.rotation.x -= 0.30;
+            }
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.z += 1.05;
+              this.bones.rightArm.rotation.x -= 0.30;
+            }
+            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.y -= 0.55;
+            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.y += 0.55;
+
+          } else if (this.currentPose === 'wave') {
+            /* ===== 5. 親切揮手致意 ===== */
+            if (this.bones.leftArm) {
+              this.bones.leftArm.rotation.z -= 1.32;
+            }
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.z += 0.55;
+              this.bones.rightArm.rotation.x += 0.18;
+            }
+            if (this.bones.rightForeArm) {
+              this.bones.rightForeArm.rotation.y += 0.85;
+              this.bones.rightForeArm.rotation.z -= 0.20 + Math.sin(t * 4.8) * 0.28;
+            }
+
+          } else if (this.currentPose === 'walk') {
+            /* ===== 6. 休閒漫步走姿 ===== */
+            const walk = Math.sin(t * 3.2);
+
+            // 雙腿小幅邁步
+            if (this.bones.leftUpLeg) this.bones.leftUpLeg.rotation.x -= walk * 0.22;
+            if (this.bones.rightUpLeg) this.bones.rightUpLeg.rotation.x += walk * 0.22;
+            if (this.bones.leftLeg) this.bones.leftLeg.rotation.x += Math.max(0, walk * 0.32);
+            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x += Math.max(0, -walk * 0.32);
+
+            // 雙臂自然下垂微擺
+            if (this.bones.leftArm) {
+              this.bones.leftArm.rotation.z -= 1.30;
+              this.bones.leftArm.rotation.x += walk * 0.16;
+            }
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.z += 1.30;
+              this.bones.rightArm.rotation.x -= walk * 0.16;
+            }
+          }
+        }
+
+        this.camera.position.lerp(this.targetCameraPos, 0.06);
+        this.controls.target.lerp(this.targetLookAt, 0.06);
+        this.controls.update();
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      let app = null;
+
+      try {
+        app = new JasonAvatarScene();
+      } catch (e) {
+        console.error('WebGL Init Error:', e);
+        const lt = document.getElementById('loading-text');
+        if (lt) lt.textContent = '載入完成 (請確認瀏覽器支援 WebGL)';
+        setTimeout(() => {
+          const overlay = document.getElementById('loading-overlay');
+          if (overlay) overlay.style.display = 'none';
+        }, 1000);
+        return;
+      }
+
+      setTimeout(() => {
+        app.hideLoading();
+      }, 1500);
+
+      // 手機底部抽屜 (Bottom Sheet)
+      const controlPanel = document.getElementById('control-panel');
+      const drawerHandle = document.getElementById('drawer-handle');
+      const drawerIcon = document.getElementById('drawer-icon');
+      const drawerTip = document.getElementById('drawer-tip-text');
+      const mobileToggleBtn = document.getElementById('btn-toggle-mobile-panel');
+      const mobileBtnText = document.getElementById('mobile-panel-btn-text');
+
+      let isDrawerExpanded = true;
+
+      const toggleDrawer = () => {
+        isDrawerExpanded = !isDrawerExpanded;
+        if (isDrawerExpanded) {
+          controlPanel.style.transform = 'translateY(0)';
+          drawerIcon.className = 'fa-solid fa-chevron-down text-[8px]';
+          drawerTip.innerHTML = '<i class="fa-solid fa-chevron-down text-[8px]"></i> 點擊收起面板 (全螢幕觀看)';
+          mobileBtnText.textContent = '收起';
+        } else {
+          controlPanel.style.transform = 'translateY(calc(100% - 38px))';
+          drawerIcon.className = 'fa-solid fa-chevron-up text-[8px]';
+          drawerTip.innerHTML = '<i class="fa-solid fa-chevron-up text-[8px]"></i> 點擊展開動作面板';
+          mobileBtnText.textContent = '動作';
+        }
+      };
+
+      if (drawerHandle) drawerHandle.addEventListener('click', toggleDrawer);
+      if (mobileToggleBtn) mobileToggleBtn.addEventListener('click', toggleDrawer);
+
+      // 本地選取檔案按鈕
+      const glbInput = document.getElementById('glb-file-input');
+      glbInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            app.loadCustomGLB(evt.target.result, true, file.name);
+          };
+          reader.readAsArrayBuffer(file);
+        }
+      });
+
+      // 視角切換按鈕
+      const focusBtns = [
+        { id: 'btn-focus-face', focus: 'face' },
+        { id: 'btn-focus-body', focus: 'body' },
+        { id: 'btn-focus-shoes', focus: 'shoes' },
+      ];
+      focusBtns.forEach((item) => {
+        const el = document.getElementById(item.id);
+        if (!el) return;
+        el.addEventListener('click', () => {
+          focusBtns.forEach((b) => {
+            const btn = document.getElementById(b.id);
+            btn.classList.remove('bg-blue-600', 'text-white', 'shadow');
+            btn.classList.add('text-neutral-300');
+          });
+          el.classList.add('bg-blue-600', 'text-white', 'shadow');
+          el.classList.remove('text-neutral-300');
+          app.setFocus(item.focus);
+        });
+      });
+
+      // 自動旋轉
+      const btnRotate = document.getElementById('btn-toggle-rotate');
+      btnRotate.addEventListener('click', () => {
+        const state = app.toggleRotate();
+        btnRotate.querySelector('span').textContent = `自轉: ${state ? '開' : '關'}`;
+      });
+
+      // 重設視角
+      document.getElementById('btn-reset-view').addEventListener('click', () => {
+        app.setFocus('body');
+        document.getElementById('btn-focus-body').click();
+      });
+
+      // 燈光切換
+      const lightModes = ['studio', 'beach', 'neon'];
+      const lightLabels = { studio: '攝影棚', beach: '烈日', neon: '霓虹' };
+      let curLight = 0;
+      document.getElementById('btn-toggle-lighting').addEventListener('click', () => {
+        curLight = (curLight + 1) % lightModes.length;
+        const mode = lightModes[curLight];
+        app.setLighting(mode);
+        document.getElementById('lighting-label').textContent = lightLabels[mode];
+      });
+
+      // 截圖
+      document.getElementById('btn-export-image').addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = `Jason-Studio-${Date.now()}.png`;
+        link.href = app.renderer.domElement.toDataURL('image/png');
+        link.click();
+      });
+
+      // 大分類切換
+      const tabs = [
+        { id: 'tab-action', panelId: 'panel-action' },
+        { id: 'tab-outfit', panelId: 'panel-outfit' },
+        { id: 'tab-accessories', panelId: 'panel-accessories' },
+      ];
+
+      tabs.forEach(t => {
+        const btn = document.getElementById(t.id);
+        btn.addEventListener('click', () => {
+          tabs.forEach(item => {
+            const b = document.getElementById(item.id);
+            const p = document.getElementById(item.panelId);
+            b.classList.remove('bg-blue-600', 'text-white', 'shadow', 'font-bold');
+            b.classList.add('text-neutral-400', 'font-medium');
+            p.classList.add('hidden');
+          });
+          btn.classList.add('bg-blue-600', 'text-white', 'shadow', 'font-bold');
+          btn.classList.remove('text-neutral-400', 'font-medium');
+          document.getElementById(t.panelId).classList.remove('hidden');
+        });
+      });
+
+      // 姿態動作按鈕切換
+      document.querySelectorAll('.pose-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.pose-btn').forEach(b => {
+            b.classList.remove('border-emerald-500', 'bg-emerald-950/40', 'border-blue-500', 'bg-blue-950/40', 'shadow-lg', 'shadow-blue-500/20', 'shadow-emerald-500/20');
+            b.classList.add('border-neutral-800', 'bg-neutral-900/60');
+          });
+
+          const pose = btn.getAttribute('data-pose');
+          if (pose === 'soccer') {
+            btn.classList.add('border-emerald-500', 'bg-emerald-950/40', 'shadow-lg', 'shadow-emerald-500/20');
+          } else {
+            btn.classList.add('border-blue-500', 'bg-blue-950/40', 'shadow-lg', 'shadow-blue-500/20');
+          }
+          btn.classList.remove('border-neutral-800', 'bg-neutral-900/60');
+
+          app.setPose(pose);
+        });
+      });
+
+      // 服裝換色卡片點擊
+      document.querySelectorAll('.color-card').forEach(card => {
+        card.addEventListener('click', () => {
+          document.querySelectorAll('.color-card').forEach(c => {
+            c.classList.remove('border-blue-500', 'bg-blue-950/40');
+            c.classList.add('border-neutral-800', 'bg-neutral-900/60');
+          });
+          card.classList.add('border-blue-500', 'bg-blue-950/40');
+          card.classList.remove('border-neutral-800', 'bg-neutral-900/60');
+
+          const color = card.getAttribute('data-color');
+          app.setJacketColor(color);
+        });
+      });
+
+      document.getElementById('btn-reset-outfit').addEventListener('click', () => {
+        app.setJacketColor('original');
+      });
+
+      // 眼鏡切換
+      const gBlack = document.getElementById('btn-glasses-black');
+      const gGold = document.getElementById('btn-glasses-gold');
+      const gNone = document.getElementById('btn-glasses-none');
+
+      const setGActive = (activeEl) => {
+        [gBlack, gGold, gNone].forEach(el => {
+          el.classList.remove('border-blue-500', 'bg-blue-950/40');
+          el.classList.add('border-neutral-800', 'bg-neutral-900/60');
+          const check = el.querySelector('.fa-circle-check');
+          if (check) check.remove();
+        });
+        activeEl.classList.add('border-blue-500', 'bg-blue-950/40');
+        activeEl.classList.remove('border-neutral-800', 'bg-neutral-900/60');
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-circle-check text-blue-400';
+        activeEl.appendChild(icon);
+      };
+
+      gBlack.addEventListener('click', () => {
+        setGActive(gBlack);
+        app.setGlassesStyle('black');
+      });
+      gGold.addEventListener('click', () => {
+        setGActive(gGold);
+        app.setGlassesStyle('gold');
+      });
+      gNone.addEventListener('click', () => {
+        setGActive(gNone);
+        app.setGlassesStyle('none');
+      });
+    });
+  })();
+  </script>
+</body>
+</html>
