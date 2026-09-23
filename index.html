@@ -176,10 +176,10 @@
               <i class="fa-solid fa-futbol text-xl"></i>
             </div>
             <div class="text-xs font-bold text-neutral-200 flex items-center gap-1">
-              <span>足球巨星 (踩波)</span>
-              <span class="text-[9px] px-1 bg-emerald-500/30 text-emerald-300 rounded font-normal">寫真</span>
+              <span>足球巨星 (的波)</span>
+              <span class="text-[9px] px-1 bg-emerald-500/30 text-emerald-300 rounded font-normal">動態的波</span>
             </div>
-            <div class="text-[10px] text-neutral-400 mt-0.5">單腳踩球名場面、從容休閒</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">左右腳連續的波、無限循環</div>
           </div>
 
           <!-- 3. 武術宗師抱拳禮 -->
@@ -187,8 +187,8 @@
             <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-rose-600/20 text-rose-400 flex items-center justify-center text-lg mb-1 group-hover:scale-110 transition">
               <i class="fa-solid fa-hand-fist text-xl"></i>
             </div>
-            <div class="text-xs font-bold text-neutral-200">武術宗師 (抱拳禮)</div>
-            <div class="text-[10px] text-neutral-400 mt-0.5">傳統中華抱拳、沉穩威儀</div>
+            <div class="text-xs font-bold text-neutral-200">武術宗師 (打功夫)</div>
+            <div class="text-[10px] text-neutral-400 mt-0.5">詠春連環直衝拳、剛勁有力</div>
           </div>
 
           <!-- 4. 自信叉腰模特 -->
@@ -554,21 +554,15 @@
               this.glassesMeshes.push(child);
             }
 
-            // 嚴格排除人體皮膚、臉部、五官、頭髮、眼鏡、鞋子 (絕對不變綠面！)
-            const isSkinOrBody = n === 'body' || n.includes('head') || n.includes('face') || n.includes('skin') ||
-                                 n.includes('hair') || n.includes('eye') || n.includes('teeth') || n.includes('tongue') ||
-                                 n.includes('glass') || n.includes('shoe') || n.includes('foot') ||
-                                 matName.includes('skin') || matName.includes('head') || matName.includes('face') ||
-                                 matName.includes('hair') || matName.includes('eye') || matName.includes('shoe');
+            // 嚴格排除人體皮膚、臉部、五官、頭髮、眼鏡、鞋子 (臉部與手部絕對保留真實膚色！)
+            const isSkinOrNonSuit = n === 'body' || n.includes('head') || n.includes('face') || n.includes('skin') ||
+                                    n.includes('hair') || n.includes('eye') || n.includes('teeth') || n.includes('tongue') ||
+                                    n.includes('glass') || n.includes('shoe') || n.includes('foot') ||
+                                    matName.includes('skin') || matName.includes('head') || matName.includes('face') ||
+                                    matName.includes('hair') || matName.includes('eye') || matName.includes('shoe') || matName.includes('glass');
 
-            // 精準識別西裝外套與西裝褲
-            const isSuitGarment = n.includes('outfit') || n.includes('top') || n.includes('jacket') ||
-                                  n.includes('bottom') || n.includes('pant') || n.includes('suit') ||
-                                  n.includes('blazer') || n.includes('coat') || n.includes('cloth') ||
-                                  matName.includes('outfit') || matName.includes('top') || matName.includes('jacket') ||
-                                  matName.includes('suit') || matName.includes('cloth');
-
-            if (!isSkinOrBody && isSuitGarment) {
+            // 凡不是五官皮膚、頭髮、眼鏡、鞋子的網格，100% 屬於西裝外套與西裝褲！
+            if (!isSkinOrNonSuit) {
               if (child.material) {
                 if (Array.isArray(child.material)) {
                   child.material.forEach((m, idx) => {
@@ -656,17 +650,24 @@
 
         const color = new THREE.Color(hexColor);
         this.jacketMeshes.forEach(mesh => {
-          const applyColor = (mat) => {
+          const applyColor = (mat, orig) => {
             if (!mat) return;
+            // 暫時卸下原裝深藍貼圖干擾，讓新西裝色彩純淨顯色
+            mat.map = null;
             mat.color = color.clone();
-            mat.roughness = 0.55;
+            mat.roughness = 0.65;
+            mat.metalness = 0.05;
             mat.needsUpdate = true;
           };
 
           if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(m => applyColor(m));
+            mesh.material.forEach((m, idx) => {
+              const orig = this.originalMaterials.get(`${mesh.uuid}_${idx}`);
+              applyColor(m, orig);
+            });
           } else {
-            applyColor(mesh.material);
+            const orig = this.originalMaterials.get(mesh.uuid);
+            applyColor(mesh.material, orig);
           }
         });
       }
@@ -826,18 +827,16 @@
           resetB(this.bones.hips);
 
           if (this.currentPose === 'idle') {
-            /* ===== 1. 自然垂手站立 (Z軸歸零不前後位移，以X軸真垂落身側，呼吸微動) ===== */
+            /* ===== 1. 自然垂手呼吸站立 (雙臂垂直順垂貼身側，呼吸微動) ===== */
             const breath = Math.sin(t * 2.2) * 0.012;
 
             if (this.bones.leftArm) {
-              // 保持 Z 在原始冠狀面 (絕不向後拉也不向前平舉)
               this.bones.leftArm.rotation.z = this.bones.leftArm.userData.initRot.z;
-              // X 軸順轉 75度垂下身側
-              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x - 1.30 - breath * 0.15;
+              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x + 1.30 + breath * 0.15;
             }
             if (this.bones.rightArm) {
               this.bones.rightArm.rotation.z = this.bones.rightArm.userData.initRot.z;
-              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x - 1.30 - breath * 0.15;
+              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x + 1.30 + breath * 0.15;
             }
             if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.copy(this.bones.leftForeArm.userData.initRot);
             if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.copy(this.bones.rightForeArm.userData.initRot);
@@ -845,104 +844,150 @@
             if (this.bones.spine) this.bones.spine.rotation.x = this.bones.spine.userData.initRot.x + breath * 0.5;
 
           } else if (this.currentPose === 'soccer') {
-            /* ===== 2. 足球巨星 (休閒帥氣單腳踩波風采) ===== */
-            const breath = Math.sin(t * 2) * 0.012;
+            /* ===== 2. 足球巨星 (連續無限的波 Juggling！) ===== */
+            const juggleSpeed = 2.4;
+            const cycle = (t * juggleSpeed) % 2; // 0~1 右腳踢, 1~2 左腳踢
+            const isRight = cycle < 1;
+            const sub = cycle % 1;
+            const bounce = Math.sin(sub * Math.PI); // 拋物線
 
-            // 右腿屈膝輕踩於球頂
-            if (this.bones.rightUpLeg) this.bones.rightUpLeg.rotation.x -= 0.32;
-            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x += 0.46;
-            if (this.bones.rightFoot) this.bones.rightFoot.rotation.x -= 0.12;
+            // 足球運動軌跡 (於腳背 0.32m 拋物線回彈至 0.78m)
+            const ballX = isRight ? 0.08 : -0.08;
+            const ballY = 0.32 + bounce * 0.44;
+            const ballZ = 0.25 + Math.sin(sub * Math.PI) * 0.03;
 
-            // 雙臂自然放鬆垂於身側
+            if (this.soccerBall) {
+              this.soccerBall.position.set(ballX, ballY, ballZ);
+              this.soccerBall.rotation.x += 0.09;
+              this.soccerBall.rotation.y += 0.03;
+            }
+
+            // 雙臂自然下垂微開，維持運動平衡
             if (this.bones.leftArm) {
-              this.bones.leftArm.rotation.z -= 1.28;
-              this.bones.leftArm.rotation.x += 0.05;
+              this.bones.leftArm.rotation.z = this.bones.leftArm.userData.initRot.z;
+              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x + 1.20;
             }
             if (this.bones.rightArm) {
-              this.bones.rightArm.rotation.z += 1.28;
-              this.bones.rightArm.rotation.x += 0.05;
+              this.bones.rightArm.rotation.z = this.bones.rightArm.userData.initRot.z;
+              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x + 1.20;
             }
-            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.y -= 0.25;
-            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.y += 0.25;
+            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.y = this.bones.leftForeArm.userData.initRot.y - 0.22;
+            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.y = this.bones.rightForeArm.userData.initRot.y + 0.22;
 
-            // 足球停放於右腳下前方
-            if (this.soccerBall) {
-              this.soccerBall.position.set(0.12, 0.11, 0.22);
+            // 眼神注視足球
+            if (this.bones.head) this.bones.head.rotation.x = this.bones.head.userData.initRot.x + 0.25;
+
+            // 左右雙腳交替起腳提膝顛球
+            if (isRight) {
+              if (this.bones.rightUpLeg) this.bones.rightUpLeg.rotation.x = this.bones.rightUpLeg.userData.initRot.x - bounce * 0.38;
+              if (this.bones.rightLeg) this.bones.rightLeg.rotation.x = this.bones.rightLeg.userData.initRot.x + bounce * 0.50;
+              if (this.bones.rightFoot) this.bones.rightFoot.rotation.x = this.bones.rightFoot.userData.initRot.x - bounce * 0.22;
+
+              if (this.bones.leftUpLeg) this.bones.leftUpLeg.rotation.copy(this.bones.leftUpLeg.userData.initRot);
+              if (this.bones.leftLeg) this.bones.leftLeg.rotation.copy(this.bones.leftLeg.userData.initRot);
+              if (this.bones.leftFoot) this.bones.leftFoot.rotation.copy(this.bones.leftFoot.userData.initRot);
+            } else {
+              if (this.bones.leftUpLeg) this.bones.leftUpLeg.rotation.x = this.bones.leftUpLeg.userData.initRot.x - bounce * 0.38;
+              if (this.bones.leftLeg) this.bones.leftLeg.rotation.x = this.bones.leftLeg.userData.initRot.x + bounce * 0.50;
+              if (this.bones.leftFoot) this.bones.leftFoot.rotation.x = this.bones.leftFoot.userData.initRot.x - bounce * 0.22;
+
+              if (this.bones.rightUpLeg) this.bones.rightUpLeg.rotation.copy(this.bones.rightUpLeg.userData.initRot);
+              if (this.bones.rightLeg) this.bones.rightLeg.rotation.copy(this.bones.rightLeg.userData.initRot);
+              if (this.bones.rightFoot) this.bones.rightFoot.rotation.copy(this.bones.rightFoot.userData.initRot);
             }
-            if (this.bones.chest) this.bones.chest.rotation.x += breath;
 
           } else if (this.currentPose === 'kungfu') {
-            /* ===== 3. 武術宗師 (中華傳統抱拳禮) ===== */
-            // 雙腳沉穩開立扎馬
+            /* ===== 3. 武術宗師 (中國功夫·詠春連環直衝拳) ===== */
+            // 下盤微沉扎穩馬步
+            if (this.bones.hips) this.bones.hips.position.y = this.baseHipsY - 0.05;
             if (this.bones.leftUpLeg) {
-              this.bones.leftUpLeg.rotation.z += 0.12;
-              this.bones.leftUpLeg.rotation.x -= 0.08;
+              this.bones.leftUpLeg.rotation.x = this.bones.leftUpLeg.userData.initRot.x - 0.12;
+              this.bones.leftUpLeg.rotation.z = this.bones.leftUpLeg.userData.initRot.z + 0.15;
             }
             if (this.bones.rightUpLeg) {
-              this.bones.rightUpLeg.rotation.z -= 0.12;
-              this.bones.rightUpLeg.rotation.x -= 0.08;
+              this.bones.rightUpLeg.rotation.x = this.bones.rightUpLeg.userData.initRot.x - 0.12;
+              this.bones.rightUpLeg.rotation.z = this.bones.rightUpLeg.userData.initRot.z - 0.15;
             }
-            if (this.bones.leftLeg) this.bones.leftLeg.rotation.x += 0.16;
-            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x += 0.16;
-            if (this.bones.hips) this.bones.hips.position.y -= 0.03;
+            if (this.bones.leftLeg) this.bones.leftLeg.rotation.x = this.bones.leftLeg.userData.initRot.x + 0.25;
+            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x = this.bones.rightLeg.userData.initRot.x + 0.25;
 
-            // 雙臂於胸前抱拳相合 (左掌覆於右拳)
+            // 雙臂在胸前正前方連環出拳 (絕不向後扯！)
+            const punch = Math.sin(t * 6.5);
+
             if (this.bones.leftArm) {
-              this.bones.leftArm.rotation.z -= 0.85;
-              this.bones.leftArm.rotation.x -= 0.42;
+              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x + 0.90;
+              this.bones.leftArm.rotation.z = this.bones.leftArm.userData.initRot.z + 0.45 + Math.max(0, punch) * 0.35;
             }
             if (this.bones.rightArm) {
-              this.bones.rightArm.rotation.z += 0.85;
-              this.bones.rightArm.rotation.x -= 0.42;
+              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x + 0.90;
+              this.bones.rightArm.rotation.z = this.bones.rightArm.userData.initRot.z - 0.45 - Math.max(0, -punch) * 0.35;
             }
-            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.y -= 0.85;
-            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.y += 0.85;
-
-          } else if (this.currentPose === 'model') {
-            /* ===== 4. 自信叉腰 (時尚西裝模特展姿) ===== */
-            if (this.bones.leftArm) {
-              this.bones.leftArm.rotation.z -= 1.05;
-              this.bones.leftArm.rotation.x -= 0.30;
-            }
-            if (this.bones.rightArm) {
-              this.bones.rightArm.rotation.z += 1.05;
-              this.bones.rightArm.rotation.x -= 0.30;
-            }
-            if (this.bones.leftForeArm) this.bones.leftForeArm.rotation.y -= 0.55;
-            if (this.bones.rightForeArm) this.bones.rightForeArm.rotation.y += 0.55;
-
-          } else if (this.currentPose === 'wave') {
-            /* ===== 5. 親切揮手致意 ===== */
-            if (this.bones.leftArm) {
-              this.bones.leftArm.rotation.z -= 1.32;
-            }
-            if (this.bones.rightArm) {
-              this.bones.rightArm.rotation.z += 0.55;
-              this.bones.rightArm.rotation.x += 0.18;
+            if (this.bones.leftForeArm) {
+              this.bones.leftForeArm.rotation.y = this.bones.leftForeArm.userData.initRot.y - 0.65 + Math.max(0, punch) * 0.35;
             }
             if (this.bones.rightForeArm) {
-              this.bones.rightForeArm.rotation.y += 0.85;
-              this.bones.rightForeArm.rotation.z -= 0.20 + Math.sin(t * 4.8) * 0.28;
+              this.bones.rightForeArm.rotation.y = this.bones.rightForeArm.userData.initRot.y + 0.65 - Math.max(0, -punch) * 0.35;
             }
+            if (this.bones.spine) this.bones.spine.rotation.y = this.bones.spine.userData.initRot.y + punch * 0.08;
 
-          } else if (this.currentPose === 'walk') {
-            /* ===== 6. 休閒漫步走姿 ===== */
-            const walk = Math.sin(t * 3.2);
-
-            // 雙腿小幅邁步
-            if (this.bones.leftUpLeg) this.bones.leftUpLeg.rotation.x -= walk * 0.22;
-            if (this.bones.rightUpLeg) this.bones.rightUpLeg.rotation.x += walk * 0.22;
-            if (this.bones.leftLeg) this.bones.leftLeg.rotation.x += Math.max(0, walk * 0.32);
-            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x += Math.max(0, -walk * 0.32);
-
-            // 雙臂自然下垂微擺
+          } else if (this.currentPose === 'model') {
+            /* ===== 4. 自信叉腰 (雙手叉腰、完美展現西裝線條) ===== */
+            // 雙手上臂向身體兩側收攏並向後展肘
             if (this.bones.leftArm) {
-              this.bones.leftArm.rotation.z -= 1.30;
-              this.bones.leftArm.rotation.x += walk * 0.16;
+              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x + 1.05;
+              this.bones.leftArm.rotation.y = this.bones.leftArm.userData.initRot.y - 0.20;
+              this.bones.leftArm.rotation.z = this.bones.leftArm.userData.initRot.z - 0.25;
             }
             if (this.bones.rightArm) {
-              this.bones.rightArm.rotation.z += 1.30;
-              this.bones.rightArm.rotation.x -= walk * 0.16;
+              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x + 1.05;
+              this.bones.rightArm.rotation.y = this.bones.rightArm.userData.initRot.y + 0.20;
+              this.bones.rightArm.rotation.z = this.bones.rightArm.userData.initRot.z + 0.25;
+            }
+            // 雙手前臂大幅向內折回腰際叉腰
+            if (this.bones.leftForeArm) {
+              this.bones.leftForeArm.rotation.z = this.bones.leftForeArm.userData.initRot.z + 1.15;
+              this.bones.leftForeArm.rotation.y = this.bones.leftForeArm.userData.initRot.y - 0.45;
+            }
+            if (this.bones.rightForeArm) {
+              this.bones.rightForeArm.rotation.z = this.bones.rightForeArm.userData.initRot.z - 1.15;
+              this.bones.rightForeArm.rotation.y = this.bones.rightForeArm.userData.initRot.y + 0.45;
+            }
+
+          } else if (this.currentPose === 'wave') {
+            /* ===== 5. 親切揮手致意 (左手垂放身側，右手抬至頭側親切揮手) ===== */
+            if (this.bones.leftArm) {
+              this.bones.leftArm.rotation.z = this.bones.leftArm.userData.initRot.z;
+              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x + 1.30;
+            }
+            // 右臂自然向前上方抬起 45度
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x + 0.45;
+              this.bones.rightArm.rotation.z = this.bones.rightArm.userData.initRot.z - 0.20;
+              this.bones.rightArm.rotation.y = this.bones.rightArm.userData.initRot.y + 0.15;
+            }
+            // 右前臂立起在耳側，左右流暢揮動
+            if (this.bones.rightForeArm) {
+              this.bones.rightForeArm.rotation.z = this.bones.rightForeArm.userData.initRot.z - 0.90;
+              this.bones.rightForeArm.rotation.y = this.bones.rightForeArm.userData.initRot.y + 0.35 + Math.sin(t * 4.8) * 0.35;
+            }
+            if (this.bones.head) this.bones.head.rotation.z = this.bones.head.userData.initRot.z - 0.06;
+
+          } else if (this.currentPose === 'walk') {
+            /* ===== 6. 休閒漫步走姿 (自然邁步，雙臂微擺) ===== */
+            const walk = Math.sin(t * 3.2);
+
+            if (this.bones.leftUpLeg) this.bones.leftUpLeg.rotation.x = this.bones.leftUpLeg.userData.initRot.x - walk * 0.22;
+            if (this.bones.rightUpLeg) this.bones.rightUpLeg.rotation.x = this.bones.rightUpLeg.userData.initRot.x + walk * 0.22;
+            if (this.bones.leftLeg) this.bones.leftLeg.rotation.x = this.bones.leftLeg.userData.initRot.x + Math.max(0, walk * 0.32);
+            if (this.bones.rightLeg) this.bones.rightLeg.rotation.x = this.bones.rightLeg.userData.initRot.x + Math.max(0, -walk * 0.32);
+
+            if (this.bones.leftArm) {
+              this.bones.leftArm.rotation.z = this.bones.leftArm.userData.initRot.z;
+              this.bones.leftArm.rotation.x = this.bones.leftArm.userData.initRot.x + 1.25 + walk * 0.16;
+            }
+            if (this.bones.rightArm) {
+              this.bones.rightArm.rotation.z = this.bones.rightArm.userData.initRot.z;
+              this.bones.rightArm.rotation.x = this.bones.rightArm.userData.initRot.x + 1.25 - walk * 0.16;
             }
           }
         }
